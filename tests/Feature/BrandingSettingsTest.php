@@ -109,4 +109,21 @@ class BrandingSettingsTest extends TestCase
         $response->assertSee(Storage::disk('public')->url('icons/login-icon.png'), false);
         $response->assertSee('alt="'.config('app.name').'"', false);
     }
+
+    public function test_an_ico_icon_can_be_uploaded(): void
+    {
+        Storage::fake('public');
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test('pages::settings.branding')
+            ->set('icon', UploadedFile::fake()->create('favicon.ico', 10, 'image/x-icon'))
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $settings = Setting::current();
+
+        $this->assertNotNull($settings->icon_path);
+
+        Storage::disk('public')->assertExists($settings->icon_path);
+    }
 }
