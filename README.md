@@ -106,16 +106,17 @@ The local-only **Log** option writes outgoing emails to `storage/logs/laravel.lo
 #### Gmail
 
 1. Create an OAuth client in Google Cloud Console.
-2. Add this authorized redirect URI:
+2. Enable the **Gmail API** for the project under APIs & Services → Library.
+3. Add this authorized redirect URI:
 
    ```text
    https://your-domain.com/settings/email/callback/gmail
    ```
 
-3. Configure the OAuth consent screen and add the sending account as a test user while the app is unverified.
-4. Enter the Google client ID and client secret in **Settings → Email**, save them, then click **Connect Gmail**.
+4. Configure the OAuth consent screen and add the sending account as a test user while the app is unverified.
+5. Enter the Google client ID and client secret in **Settings → Email**, save them, then click **Connect Gmail**.
 
-The app requests the `https://mail.google.com/` scope because it sends through Gmail SMTP. This is a restricted Google scope, and Google may require OAuth verification for long-lived production use. If the OAuth app remains in testing mode, refresh tokens may expire and require reconnection. Twilio SendGrid is often simpler for production email.
+Gmail sends through the Gmail API using the `https://www.googleapis.com/auth/gmail.send` scope, so SMTP authentication is not required. Google may require OAuth verification for long-lived production use. If the OAuth app remains in testing mode, refresh tokens may expire after seven days and require reconnection; reconnect Gmail if sending starts failing. Twilio SendGrid is often simpler for production email.
 
 #### Outlook
 

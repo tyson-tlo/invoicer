@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\TestEmailMail;
+use App\Mail\Transport\GmailApiTransport;
 use App\Models\EmailProviderSetting;
 use App\Models\User;
 use App\Services\EmailProviderMailer;
@@ -13,6 +14,9 @@ use Illuminate\Support\Facades\Mail;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
 use Livewire\Livewire;
+use Symfony\Component\Mailer\Envelope;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\RawMessage;
 use Tests\TestCase;
 
 class EmailSettingsTest extends TestCase
@@ -372,7 +376,44 @@ class EmailSettingsTest extends TestCase
 
         $config = app(EmailProviderMailer::class)->mailerConfig($settings->refresh());
 
-        $this->assertSame('new-access-token', $config['password']);
+        $this->assertSame('new-access-token', $config['access_token']);
         $this->assertSame('new-access-token', $settings->fresh()->access_token);
+    }
+
+    public function test_gmail_uses_the_gmail_api_transport(): void
+    {
+        $settings = EmailProviderSetting::current();
+        $settings->update([
+            'provider' => 'gmail',
+            'account_email' => 'sender@gmail.com',
+            'google_client_id' => 'google-id',
+            'google_client_secret' => 'google-secret',
+            'access_token' => 'access-token',
+            'token_expires_at' => now()->addHour(),
+        ]);
+
+        $config = app(EmailProviderMailer::class)->mailerConfig($settings->refresh());
+
+        $this->assertSame('gmail-api', $config['transport']);
+        $this->assertSame('access-token', $config['access_token']);
+    }
+
+    public function test_gmail_api_transport_sends_the_raw_message(): void
+    {
+        Http::fake([
+            'gmail.googleapis.com/*' => Http::response(['id' => 'message-id']),
+        ]);
+
+        $transport = new GmailApiTransport('access-token');
+        $message = new RawMessage("From: sender@gmail.com\r\nTo: client@example.com\r\nSubject: Test\r\n\r\nHello");
+        $envelope = new Envelope(new Address('sender@gmail.com'), [new Address('client@example.com')]);
+
+        $transport->send($message, $envelope);
+
+        Http::assertSent(function ($request): bool {
+            return $request->url() === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
+                && is_string($request['raw'])
+                && $request['raw'] !== '';
+        });
     }
 }

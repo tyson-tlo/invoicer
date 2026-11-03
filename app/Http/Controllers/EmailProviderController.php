@@ -42,7 +42,7 @@ class EmailProviderController extends Controller
                     'openid',
                     'profile',
                     'email',
-                    'https://mail.google.com/',
+                    'https://www.googleapis.com/auth/gmail.send',
                 ])
                 ->with(['access_type' => 'offline', 'prompt' => 'consent'])
                 ->redirect();

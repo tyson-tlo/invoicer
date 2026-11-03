@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Mail\Transport\GmailApiTransport;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +26,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        Mail::extend('gmail-api', function (array $config): GmailApiTransport {
+            return new GmailApiTransport((string) ($config['access_token'] ?? ''));
+        });
     }
 
     /**

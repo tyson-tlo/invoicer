@@ -76,6 +76,13 @@ class EmailProviderMailer
      */
     public function mailerConfig(EmailProviderSetting $settings): array
     {
+        if ($settings->provider === 'gmail') {
+            return [
+                'transport' => 'gmail-api',
+                'access_token' => $this->accessToken($settings),
+            ];
+        }
+
         $password = $settings->provider === 'sendgrid'
             ? (string) $settings->api_key
             : $this->accessToken($settings);
