@@ -284,4 +284,4 @@ Use a standard PHP application server with:
 
 ## License
 
-This project is based on the Laravel Livewire starter kit and is released under the MIT license.
+This project is open source and released under the MIT license. You can use, modify, distribute, and sell it freely, including commercially. See [LICENSE](LICENSE) for the full text.
