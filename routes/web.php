@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Controllers\InvoicePdfController;
+use App\Http\Controllers\SetupController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
+Route::get('setup', [SetupController::class, 'create'])->name('setup');
+Route::post('setup', [SetupController::class, 'store'])->name('setup.store');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::livewire('dashboard', 'pages::dashboard')->name('dashboard');
 
     Route::livewire('customers', 'pages::customers')->name('customers');

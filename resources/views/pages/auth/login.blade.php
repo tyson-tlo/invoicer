@@ -50,5 +50,12 @@
                 </flux:button>
             </div>
         </form>
+
+        @if (\App\Models\User::query()->doesntExist())
+            <div class="text-center text-sm text-zinc-600 dark:text-zinc-400">
+                <span>{{ __('First time here?') }}</span>
+                <flux:link :href="route('setup')" wire:navigate>{{ __('Create the admin account') }}</flux:link>
+            </div>
+        @endif
     </div>
 </x-layouts::auth>

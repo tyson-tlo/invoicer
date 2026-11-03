@@ -43,9 +43,15 @@
                         {{ __('New invoice') }}
                     </flux:button>
                 @else
-                    <flux:button :href="route('login')" variant="primary">
-                        {{ __('Log in') }}
-                    </flux:button>
+                    @if (\App\Models\User::query()->doesntExist())
+                        <flux:button :href="route('setup')" variant="primary">
+                            {{ __('Create admin account') }}
+                        </flux:button>
+                    @else
+                        <flux:button :href="route('login')" variant="primary">
+                            {{ __('Log in') }}
+                        </flux:button>
+                    @endif
                 @endauth
             </div>
         </main>

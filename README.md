@@ -4,7 +4,7 @@ A single-organization invoicing application built with Laravel and Livewire. It 
 
 ## What it does
 
-- **Authentication**: login-only access with registration disabled. Includes Fortify-based two-factor authentication and passkey support.
+- **Authentication**: login-only access with registration disabled. The first and only admin account is created through a one-time setup page with no email verification. Includes Fortify-based two-factor authentication and passkey support.
 - **Dashboard**: KPIs for outstanding, overdue, draft, and paid invoices, plus draft, sent-unpaid, and recently paid sections with 7/30/90-day views.
 - **Customers**: create and edit customers in a reusable modal, search customers, paginate results, and see how many invoices belong to each customer.
 - **Invoices**: create and fully edit invoices, manage line items, set status and dates, add a human-readable description, and track draft/sent/paid states.
@@ -63,35 +63,20 @@ A single-organization invoicing application built with Laravel and Livewire. It 
    php artisan migrate
    ```
 
-5. Create the admin user. Set these values in `.env` first if you do not want the defaults:
-
-   ```dotenv
-   ADMIN_EMAIL=admin@invoicer.test
-   ADMIN_PASSWORD=password
-   ```
-
-   Then run:
-
-   ```bash
-   php artisan db:seed
-   ```
-
-   The default credentials are `admin@invoicer.test` / `password`. Change them before deploying.
-
-6. Link public storage so uploaded logos and browser icons are served:
+5. Link public storage so uploaded logos and browser icons are served:
 
    ```bash
    php artisan storage:link
    ```
 
-7. Install and build the frontend:
+6. Install and build the frontend:
 
    ```bash
    npm install
    npm run build
    ```
 
-8. Start the application:
+7. Start the application:
 
    ```bash
    composer run dev
@@ -99,7 +84,9 @@ A single-organization invoicing application built with Laravel and Livewire. It 
 
    This starts the Laravel server, Vite, the queue listener, and log tailing. Alternatively, run `php artisan serve` and `npm run dev` in separate terminals.
 
-9. Open `http://localhost:8000/login` and sign in.
+8. Open `http://localhost:8000`. On a fresh database, click **Create admin account** (or visit `/setup`) and create the first admin user. No email verification is required.
+
+   The setup page is available only while the database has no users. After the first admin exists, registration and setup are disabled and you use the login page.
 
 ## Configuration
 
@@ -152,7 +139,7 @@ The mailbox must allow SMTP AUTH. Some Microsoft 365 tenants disable SMTP AUTH b
 
 #### System email
 
-Invoice email uses the connected provider above. Other system email, such as password resets, still uses Laravel's default mailer from `.env` (`MAIL_MAILER`). Set a real SMTP provider there if you need password reset and verification emails in production.
+Invoice email uses the connected provider above. Other system email, such as password resets, still uses Laravel's default mailer from `.env` (`MAIL_MAILER`). Set a real SMTP provider there if you need password reset emails in production.
 
 ### Invoice numbering
 
@@ -235,11 +222,7 @@ Use a standard PHP application server with:
    php artisan migrate --force
    ```
 
-5. Create the admin account. Set `ADMIN_EMAIL` and a strong `ADMIN_PASSWORD` in `.env`, run the seeder once, then remove the password from `.env` if you prefer:
-
-   ```bash
-   php artisan db:seed --force
-   ```
+5. Create the admin account. Open the deployed app and visit `/setup` (or click **Create admin account** on the home page). The setup page is available only while the database has no users, so complete this immediately after deployment. No email verification is required.
 
 6. Link public storage and set permissions:
 
@@ -295,6 +278,7 @@ Use a standard PHP application server with:
 
 - Back up the database and `storage/app/public` (logos and browser icons). Also back up the application `.env` or at minimum the `APP_KEY`, because encrypted provider credentials cannot be recovered if the key is lost.
 - Keep `APP_DEBUG=false` in production.
+- Complete `/setup` immediately after deployment. Anyone who reaches it before you create the admin will be able to claim the admin account.
 - Use a strong admin password and enable two-factor authentication or passkeys in **Settings → Security**.
 - OAuth redirect URIs must use the production HTTPS domain and match `APP_URL`.
 

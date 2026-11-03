@@ -9,7 +9,7 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('settings/profile', 'pages::settings.profile')->name('profile.edit');
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::livewire('settings/invoicing', 'pages::settings.invoicing')->name('settings.invoicing');
     Route::livewire('settings/branding', 'pages::settings.branding')->name('settings.branding');
 

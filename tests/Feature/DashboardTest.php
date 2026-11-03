@@ -94,4 +94,11 @@ class DashboardTest extends TestCase
             ->assertSee('$300.00')
             ->assertSee('$700.00');
     }
+
+    public function test_unverified_users_can_access_the_dashboard(): void
+    {
+        $this->actingAs(User::factory()->unverified()->create());
+
+        $this->get(route('dashboard'))->assertOk();
+    }
 }

@@ -15,7 +15,7 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertSee(config('app.name'));
-        $response->assertSee('Log in');
+        $response->assertSee('Create admin account');
         $response->assertDontSee('Laravel');
     }
 }
