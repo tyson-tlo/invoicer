@@ -5,9 +5,9 @@ A single-organization invoicing application built with Laravel and Livewire. It 
 ## What it does
 
 - **Authentication**: login-only access with registration disabled. The first and only admin account is created through a one-time setup page with no email verification. Includes Fortify-based two-factor authentication and passkey support.
-- **Dashboard**: KPIs for outstanding, overdue, draft, and paid invoices, plus draft, sent-unpaid, and recently paid sections with 7/30/90-day views.
+- **Dashboard**: KPIs for outstanding, overdue, draft, and collected payments, plus draft, sent-unpaid, and recent-payment sections with 7/30/90-day views and partial-payment progress.
 - **Customers**: create and edit customers in a reusable modal, search customers, paginate results, and see how many invoices belong to each customer.
-- **Invoices**: create and fully edit invoices, manage line items, set status and dates, add a human-readable description, and track draft/sent/paid states.
+- **Invoices**: create and fully edit invoices, manage line items, set status and dates, add a human-readable description, record full or partial payments with method/reference/note/proof details, see paid percentages, and remove payments. Tracks draft, sent, partial, and paid states.
 - **Invoice numbering**: automatic customer-prefixed identifiers with a persistent 6-digit sequence, custom identifiers, per-customer prefixes, and smart continuation of previous custom identifiers.
 - **PDF invoices**: view PDFs inline in the browser or download them, using Dompdf and the uploaded branding logo.
 - **Invoice email**: send an invoice PDF to the customer through Gmail, Outlook, Twilio SendGrid, or the local log mailer.

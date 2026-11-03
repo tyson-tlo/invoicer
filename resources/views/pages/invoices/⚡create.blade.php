@@ -214,6 +214,9 @@ new #[Title('Invoice')] class extends Component {
                     $updates['paid_at'] = now();
                 } elseif ($this->status !== 'paid') {
                     $updates['paid_at'] = null;
+                    $updates['payment_method'] = null;
+                    $updates['payment_reference'] = null;
+                    $updates['payment_note'] = null;
                 }
 
                 $invoice->update($updates);
@@ -221,6 +224,10 @@ new #[Title('Invoice')] class extends Component {
                 $invoice->items()->delete();
 
                 $this->storeItems($invoice);
+
+                if ($invoice->payments()->exists()) {
+                    $invoice->refreshPaymentState();
+                }
             });
 
             Flux::toast(variant: 'success', text: __('Invoice updated.'));
@@ -476,7 +483,9 @@ new #[Title('Invoice')] class extends Component {
                     <flux:select wire:model="status" label="{{ __('Status') }}">
                         <flux:select.option value="draft">{{ __('Draft') }}</flux:select.option>
                         <flux:select.option value="sent">{{ __('Sent') }}</flux:select.option>
-                        <flux:select.option value="paid">{{ __('Paid') }}</flux:select.option>
+                        @if ($invoice?->status === 'paid')
+                            <flux:select.option value="paid">{{ __('Paid') }}</flux:select.option>
+                        @endif
                     </flux:select>
 
                     <flux:input wire:model="issue_date" label="{{ __('Issue date') }}" type="date" />

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\InvoicePdfController;
+use App\Http\Controllers\PaymentProofController;
 use App\Http\Controllers\SetupController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +20,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('invoices/{invoice}/pdf', [InvoicePdfController::class, 'view'])->name('invoices.pdf');
     Route::get('invoices/{invoice}/pdf/download', [InvoicePdfController::class, 'download'])->name('invoices.pdf.download');
     Route::livewire('invoices/{invoice}', 'pages::invoices.show')->name('invoices.show');
+    Route::get('payments/{payment}/proof', PaymentProofController::class)->name('payments.proof');
 });
 
 require __DIR__.'/settings.php';

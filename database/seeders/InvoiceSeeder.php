@@ -190,6 +190,18 @@ class InvoiceSeeder extends Seeder
                     'amount' => round((float) $item['quantity'] * (float) $item['rate'], 2),
                 ]);
             }
+
+            if ($spec['status'] === 'paid') {
+                $invoice->payments()->create([
+                    'amount' => $subtotal + $taxAmount,
+                    'paid_at' => $spec['paid_at']->toDateString(),
+                    'method' => 'bank_transfer',
+                    'reference' => 'SEED-PAYMENT',
+                    'note' => 'Seeded payment.',
+                ]);
+
+                $invoice->refreshPaymentState();
+            }
         }
     }
 }

@@ -45,8 +45,8 @@ class InvoiceIdentifier
     {
         $settings = Setting::current();
 
-        $maxSequence = (int) Invoice::query()->max('invoice_sequence');
-        $maxId = (int) Invoice::query()->max('id');
+        $maxSequence = (int) Invoice::withTrashed()->max('invoice_sequence');
+        $maxId = (int) Invoice::withTrashed()->max('id');
 
         return max((int) $settings->next_invoice_sequence, $maxSequence + 1, $maxId + 1);
     }
@@ -78,7 +78,7 @@ class InvoiceIdentifier
                 $attempts = 0;
 
                 while ($candidate !== null
-                    && Invoice::query()->where('invoice_number', $candidate)->exists()
+                    && Invoice::withTrashed()->where('invoice_number', $candidate)->exists()
                     && $attempts < 100) {
                     $candidate = self::increment($candidate);
                     $attempts++;

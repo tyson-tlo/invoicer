@@ -26,7 +26,7 @@ class DashboardTest extends TestCase
         $response->assertOk();
         $response->assertSee('Draft invoices');
         $response->assertSee('Sent but unpaid');
-        $response->assertSee('Recently paid');
+        $response->assertSee('Recent payments');
     }
 
     public function test_draft_invoices_are_listed(): void
@@ -51,13 +51,22 @@ class DashboardTest extends TestCase
         Livewire::test('pages::dashboard')->assertSee('SENT-1');
     }
 
-    public function test_recently_paid_invoices_can_be_filtered_by_period(): void
+    public function test_recent_payments_can_be_filtered_by_period(): void
     {
-        Invoice::factory()->create([
+        $invoice = Invoice::factory()->create([
             'invoice_number' => 'PAID-20',
-            'status' => 'paid',
-            'paid_at' => now()->subDays(20),
+            'status' => 'sent',
+            'total' => 1000,
         ]);
+
+        $invoice->payments()->create([
+            'amount' => 1000,
+            'paid_at' => now()->subDays(20)->toDateString(),
+            'method' => 'bank_transfer',
+            'reference' => 'REF-20',
+        ]);
+
+        $invoice->refreshPaymentState();
 
         Livewire::test('pages::dashboard')
             ->assertSee('PAID-20')
@@ -69,25 +78,26 @@ class DashboardTest extends TestCase
             ->assertSee('PAID-20');
     }
 
-    public function test_paid_invoice_totals_are_shown_for_each_period(): void
+    public function test_payment_totals_are_shown_for_each_period(): void
     {
-        Invoice::factory()->create([
-            'status' => 'paid',
-            'paid_at' => now()->subDays(5),
-            'total' => 100,
-        ]);
+        foreach ([
+            [5, 100],
+            [20, 200],
+            [80, 400],
+        ] as [$days, $amount]) {
+            $invoice = Invoice::factory()->create([
+                'status' => 'sent',
+                'total' => $amount,
+            ]);
 
-        Invoice::factory()->create([
-            'status' => 'paid',
-            'paid_at' => now()->subDays(20),
-            'total' => 200,
-        ]);
+            $invoice->payments()->create([
+                'amount' => $amount,
+                'paid_at' => now()->subDays($days)->toDateString(),
+                'method' => 'bank_transfer',
+            ]);
 
-        Invoice::factory()->create([
-            'status' => 'paid',
-            'paid_at' => now()->subDays(80),
-            'total' => 400,
-        ]);
+            $invoice->refreshPaymentState();
+        }
 
         Livewire::test('pages::dashboard')
             ->assertSee('$100.00')
@@ -100,5 +110,19 @@ class DashboardTest extends TestCase
         $this->actingAs(User::factory()->unverified()->create());
 
         $this->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_partial_payments_are_shown_on_the_dashboard(): void
+    {
+        Invoice::factory()->create([
+            'invoice_number' => 'PARTIAL-1',
+            'status' => 'sent',
+            'total' => 1000,
+            'amount_paid' => 400,
+        ]);
+
+        Livewire::test('pages::dashboard')
+            ->assertSee('PARTIAL-1')
+            ->assertSee('40%');
     }
 }

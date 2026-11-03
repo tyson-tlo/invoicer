@@ -416,4 +416,13 @@ class EmailSettingsTest extends TestCase
                 && $request['raw'] !== '';
         });
     }
+
+    public function test_the_gmail_redirect_uri_is_shown(): void
+    {
+        $this->actingAsUser();
+
+        Livewire::test('pages::settings.email')
+            ->assertSee('Google redirect URI')
+            ->assertSee(route('settings.email.callback', 'gmail'));
+    }
 }

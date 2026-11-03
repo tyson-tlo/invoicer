@@ -6,6 +6,8 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -101,9 +103,14 @@ class InvoicesTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
 
-        $invoice = Invoice::factory()->create(['status' => 'sent']);
+        $invoice = Invoice::factory()->create(['status' => 'sent', 'total' => 1000]);
 
         Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('openPaymentModal')
+            ->set('payment_date', now()->toDateString())
+            ->set('payment_method', 'bank_transfer')
+            ->set('payment_reference', 'REF-123')
+            ->set('payment_note', 'Paid in full')
             ->call('markAsPaid')
             ->assertHasNoErrors();
 
@@ -111,6 +118,164 @@ class InvoicesTest extends TestCase
 
         $this->assertSame('paid', $invoice->status);
         $this->assertNotNull($invoice->paid_at);
+        $this->assertSame('1000.00', $invoice->amount_paid);
+        $this->assertSame('bank_transfer', $invoice->payment_method);
+        $this->assertSame('REF-123', $invoice->payment_reference);
+        $this->assertSame('Paid in full', $invoice->payment_note);
+        $this->assertSame(1, $invoice->payments()->count());
+    }
+
+    public function test_marking_an_invoice_as_paid_requires_a_payment_method(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create(['status' => 'sent']);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('openPaymentModal')
+            ->set('payment_method', '')
+            ->call('markAsPaid')
+            ->assertHasErrors(['payment_method' => 'required']);
+
+        $this->assertSame('sent', $invoice->fresh()->status);
+    }
+
+    public function test_an_invoice_can_be_deleted_after_all_payments_are_removed(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create(['status' => 'sent', 'total' => 1000]);
+
+        $payment = $invoice->payments()->create([
+            'amount' => 400,
+            'paid_at' => now()->toDateString(),
+            'method' => 'bank_transfer',
+        ]);
+
+        $invoice->refreshPaymentState();
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('deleteInvoice');
+
+        $this->assertNotSoftDeleted($invoice);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice->fresh()])
+            ->call('removePayment', $payment->id)
+            ->call('deleteInvoice')
+            ->assertRedirect(route('invoices'));
+
+        $this->assertSoftDeleted($invoice);
+    }
+
+    public function test_partial_payments_can_be_applied_and_completed(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create(['status' => 'sent', 'total' => 1000]);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('openPaymentModal')
+            ->set('payment_amount', '400')
+            ->set('payment_method', 'bank_transfer')
+            ->call('markAsPaid')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame('sent', $invoice->status);
+        $this->assertSame('400.00', $invoice->amount_paid);
+        $this->assertNull($invoice->paid_at);
+        $this->assertSame(40.0, $invoice->paidPercentage());
+        $this->assertSame(600.0, $invoice->balanceDue());
+        $this->assertTrue($invoice->isPartiallyPaid());
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('openPaymentModal')
+            ->assertSet('payment_amount', '600.00')
+            ->set('payment_amount', '600')
+            ->set('payment_method', 'cash')
+            ->call('markAsPaid')
+            ->assertHasNoErrors();
+
+        $invoice->refresh();
+
+        $this->assertSame('paid', $invoice->status);
+        $this->assertSame('1000.00', $invoice->amount_paid);
+        $this->assertNotNull($invoice->paid_at);
+        $this->assertSame(100.0, $invoice->paidPercentage());
+        $this->assertFalse($invoice->isPartiallyPaid());
+        $this->assertSame(2, $invoice->payments()->count());
+    }
+
+    public function test_payment_proof_can_be_uploaded_and_removed(): void
+    {
+        Storage::fake('local');
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create(['status' => 'sent', 'total' => 1000]);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('openPaymentModal')
+            ->set('payment_amount', '400')
+            ->set('payment_method', 'bank_transfer')
+            ->set('payment_proof', UploadedFile::fake()->create('receipt.pdf', 100, 'application/pdf'))
+            ->call('markAsPaid')
+            ->assertHasNoErrors();
+
+        $payment = $invoice->payments()->firstOrFail();
+
+        $this->assertNotNull($payment->proof_path);
+        Storage::disk('local')->assertExists($payment->proof_path);
+
+        $this->get(route('payments.proof', $payment))->assertOk();
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice->fresh()])
+            ->call('removePayment', $payment->id);
+
+        $this->assertDatabaseMissing('payments', ['id' => $payment->id]);
+        Storage::disk('local')->assertMissing($payment->proof_path);
+    }
+
+    public function test_the_invoice_list_shows_the_paid_percentage(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        Invoice::factory()->create([
+            'invoice_number' => 'PARTIAL-LIST',
+            'status' => 'sent',
+            'total' => 1000,
+            'amount_paid' => 400,
+        ]);
+
+        $this->get(route('invoices'))
+            ->assertOk()
+            ->assertSee('PARTIAL-LIST')
+            ->assertSee('40%')
+            ->assertSee('Partial');
+    }
+
+    public function test_the_invoice_list_can_filter_partially_paid_invoices(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        Invoice::factory()->create([
+            'invoice_number' => 'PARTIAL-FILTER',
+            'status' => 'sent',
+            'total' => 1000,
+            'amount_paid' => 400,
+        ]);
+
+        Invoice::factory()->create([
+            'invoice_number' => 'UNPAID-FILTER',
+            'status' => 'sent',
+            'total' => 1000,
+            'amount_paid' => 0,
+        ]);
+
+        Livewire::test('pages::invoices')
+            ->set('status', 'partial')
+            ->assertSee('PARTIAL-FILTER')
+            ->assertDontSee('UNPAID-FILTER');
     }
 
     public function test_a_draft_invoice_can_be_marked_as_sent(): void
@@ -218,5 +383,67 @@ class InvoicesTest extends TestCase
             ->assertSet('status', '')
             ->assertSee('ACME-1')
             ->assertSee('OTHER-1');
+    }
+
+    public function test_an_unpaid_invoice_can_be_soft_deleted_from_the_invoice_page(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create([
+            'status' => 'sent',
+            'paid_at' => null,
+        ]);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('deleteInvoice')
+            ->assertRedirect(route('invoices'));
+
+        $this->assertSoftDeleted($invoice);
+    }
+
+    public function test_a_paid_invoice_cannot_be_soft_deleted(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create([
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        Livewire::test('pages::invoices.show', ['invoice' => $invoice])
+            ->call('deleteInvoice');
+
+        $this->assertNotSoftDeleted($invoice);
+    }
+
+    public function test_an_unpaid_invoice_can_be_soft_deleted_from_the_invoice_list(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create([
+            'status' => 'draft',
+            'paid_at' => null,
+        ]);
+
+        Livewire::test('pages::invoices')
+            ->call('deleteInvoice', $invoice->id);
+
+        $this->assertSoftDeleted($invoice);
+    }
+
+    public function test_soft_deleted_invoices_are_hidden_from_the_invoice_list(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $invoice = Invoice::factory()->create([
+            'invoice_number' => 'DELETED-INVOICE',
+            'status' => 'draft',
+        ]);
+
+        $invoice->delete();
+
+        $this->get(route('invoices'))
+            ->assertOk()
+            ->assertDontSee('DELETED-INVOICE');
     }
 }

@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Invoice;
+use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Computed;
@@ -56,6 +57,21 @@ new #[Title('Invoices')] class extends Component {
         $this->resetPage();
     }
 
+    public function deleteInvoice(int $invoiceId): void
+    {
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+
+        if ($invoice->hasRecordedPayment()) {
+            Flux::toast(variant: 'danger', text: __('Delete all payments before deleting this invoice.'));
+
+            return;
+        }
+
+        $invoice->delete();
+
+        Flux::toast(variant: 'success', text: __('Invoice deleted.'));
+    }
+
     public function hasFilters(): bool
     {
         return $this->search !== ''
@@ -98,7 +114,16 @@ new #[Title('Invoices')] class extends Component {
                         });
                 });
             })
-            ->when($this->status !== '', fn ($query) => $query->where('status', $this->status))
+            ->when($this->status !== '', function ($query): void {
+                if ($this->status === 'partial') {
+                    $query->where('amount_paid', '>', 0)
+                        ->whereColumn('amount_paid', '<', 'total');
+
+                    return;
+                }
+
+                $query->where('status', $this->status);
+            })
             ->when($this->customer_id !== '', fn ($query) => $query->where('customer_id', (int) $this->customer_id))
             ->when($this->from !== '', fn ($query) => $query->whereDate('issue_date', '>=', $this->from))
             ->when($this->to !== '', fn ($query) => $query->whereDate('issue_date', '<=', $this->to))
@@ -135,6 +160,7 @@ new #[Title('Invoices')] class extends Component {
                     <flux:select.option value="">{{ __('All statuses') }}</flux:select.option>
                     <flux:select.option value="draft">{{ __('Draft') }}</flux:select.option>
                     <flux:select.option value="sent">{{ __('Sent') }}</flux:select.option>
+                    <flux:select.option value="partial">{{ __('Partial') }}</flux:select.option>
                     <flux:select.option value="paid">{{ __('Paid') }}</flux:select.option>
                 </flux:select>
 
@@ -177,6 +203,7 @@ new #[Title('Invoices')] class extends Component {
                         <th class="px-4 py-3 font-medium">{{ __('Issued') }}</th>
                         <th class="px-4 py-3 font-medium">{{ __('Due') }}</th>
                         <th class="px-4 py-3 text-right font-medium">{{ __('Total') }}</th>
+                        <th class="px-4 py-3 font-medium">{{ __('Payment') }}</th>
                         <th class="px-4 py-3 font-medium">{{ __('Status') }}</th>
                         <th class="px-4 py-3 text-right font-medium">{{ __('Actions') }}</th>
                     </tr>
@@ -198,13 +225,32 @@ new #[Title('Invoices')] class extends Component {
                             <td class="px-4 py-3">{{ $invoice->due_date->format('M j, Y') }}</td>
                             <td class="px-4 py-3 text-right">${{ number_format((float) $invoice->total, 2) }}</td>
                             <td class="px-4 py-3">
+                                @if ($invoice->amountPaid() > 0)
+                                    <div class="flex w-24 flex-col gap-1">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span>{{ $invoice->paidPercentage() }}%</span>
+                                            <span>{{ __('paid') }}</span>
+                                        </div>
+
+                                        <div class="h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
+                                            <div class="h-full rounded-full bg-green-500" style="width: {{ $invoice->paidPercentage() }}%"></div>
+                                        </div>
+                                    </div>
+                                @else
+                                    <span class="text-xs text-zinc-400">{{ __('Unpaid') }}</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3">
+                                @php($displayStatus = $invoice->displayStatus())
+
                                 <span @class([
                                     'rounded-full px-2 py-1 text-xs font-medium',
-                                    'bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200' => $invoice->status === 'draft',
-                                    'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' => $invoice->status === 'sent',
-                                    'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' => $invoice->status === 'paid',
+                                    'bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200' => $displayStatus === 'draft',
+                                    'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' => $displayStatus === 'sent',
+                                    'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200' => $displayStatus === 'partial',
+                                    'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' => $displayStatus === 'paid',
                                 ])>
-                                    {{ ucfirst($invoice->status) }}
+                                    {{ ucfirst($displayStatus) }}
                                 </span>
                             </td>
                             <td class="px-4 py-3">
@@ -241,12 +287,26 @@ new #[Title('Invoices')] class extends Component {
                                             aria-label="{{ __('Download PDF') }}"
                                         />
                                     </flux:tooltip>
+
+                                    <flux:tooltip :content="$invoice->hasRecordedPayment() ? __('Delete all payments before deleting this invoice') : __('Delete invoice')">
+                                        <span>
+                                            <flux:button
+                                                variant="ghost"
+                                                icon="trash"
+                                                size="sm"
+                                                :disabled="$invoice->hasRecordedPayment()"
+                                                wire:click="deleteInvoice({{ $invoice->id }})"
+                                                wire:confirm="{{ __('Soft delete this invoice?') }}"
+                                                aria-label="{{ __('Delete invoice') }}"
+                                            />
+                                        </span>
+                                    </flux:tooltip>
                                 </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-4 py-16 text-center">
+                            <td colspan="8" class="px-4 py-16 text-center">
                                 <flux:heading>{{ $this->hasFilters() ? __('No matching invoices') : __('No invoices yet') }}</flux:heading>
                                 <flux:text class="mt-1">{{ $this->hasFilters() ? __('Try adjusting your search or filters.') : __('Invoices you create will appear here.') }}</flux:text>
                             </td>

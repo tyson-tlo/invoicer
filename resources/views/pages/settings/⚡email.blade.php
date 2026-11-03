@@ -315,9 +315,31 @@ new #[Title('Email settings')] class extends Component {
                     <flux:input wire:model="google_client_id" label="{{ __('Google client ID') }}" />
                     <flux:input wire:model="google_client_secret" label="{{ __('Google client secret') }}" type="password" viewable />
 
-                    <flux:text class="text-xs">
-                        {{ __('Authorized redirect URI: :uri', ['uri' => route('settings.email.callback', 'gmail')]) }}
-                    </flux:text>
+                    <flux:callout variant="secondary">
+                        <flux:callout.heading>{{ __('Google redirect URI') }}</flux:callout.heading>
+
+                        <flux:callout.text>
+                            {{ __('Enable the Gmail API in your Google Cloud project, then add this exact URI to your OAuth client under Authorized redirect URIs.') }}
+                        </flux:callout.text>
+
+                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                            <code class="break-all rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                {{ route('settings.email.callback', 'gmail') }}
+                            </code>
+
+                            <flux:button
+                                type="button"
+                                variant="subtle"
+                                size="sm"
+                                icon="clipboard-document"
+                                x-data="{ copied: false }"
+                                x-on:click="navigator.clipboard.writeText(@js(route('settings.email.callback', 'gmail'))); copied = true; setTimeout(() => (copied = false), 2000)"
+                            >
+                                <span x-show="! copied">{{ __('Copy') }}</span>
+                                <span x-show="copied" x-cloak>{{ __('Copied') }}</span>
+                            </flux:button>
+                        </div>
+                    </flux:callout>
 
                     <div class="flex flex-wrap items-center gap-2">
                         <flux:button variant="filled" wire:click="saveGoogleCredentials">

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Invoice;
+use App\Models\Payment;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -47,17 +48,16 @@ new #[Title('Dashboard')] class extends Component {
     }
 
     /**
-     * @return Collection<int, Invoice>
+     * @return Collection<int, Payment>
      */
     #[Computed]
-    public function paidInvoices(): Collection
+    public function recentPayments(): Collection
     {
-        return Invoice::query()
-            ->with('customer')
-            ->where('status', 'paid')
-            ->whereNotNull('paid_at')
+        return Payment::query()
+            ->with(['invoice.customer'])
             ->where('paid_at', '>=', now()->subDays($this->paidPeriod))
             ->latest('paid_at')
+            ->latest('id')
             ->limit(5)
             ->get();
     }
@@ -71,7 +71,7 @@ new #[Title('Dashboard')] class extends Component {
         return Invoice::query()
             ->with('customer')
             ->where('status', 'sent')
-            ->orderByDesc('total')
+            ->orderByRaw('(total - amount_paid) desc')
             ->limit(5)
             ->get();
     }
@@ -97,7 +97,8 @@ new #[Title('Dashboard')] class extends Component {
     #[Computed]
     public function outstandingTotal(): float
     {
-        return (float) Invoice::query()->where('status', 'sent')->sum('total');
+        return (float) Invoice::query()->where('status', 'sent')->sum('total')
+            - (float) Invoice::query()->where('status', 'sent')->sum('amount_paid');
     }
 
     #[Computed]
@@ -115,15 +116,17 @@ new #[Title('Dashboard')] class extends Component {
         return (float) Invoice::query()
             ->where('status', 'sent')
             ->whereDate('due_date', '<', today())
-            ->sum('total');
+            ->sum('total')
+            - (float) Invoice::query()
+                ->where('status', 'sent')
+                ->whereDate('due_date', '<', today())
+                ->sum('amount_paid');
     }
 
     #[Computed]
     public function paidCount(): int
     {
-        return Invoice::query()
-            ->where('status', 'paid')
-            ->whereNotNull('paid_at')
+        return Payment::query()
             ->where('paid_at', '>=', now()->subDays($this->paidPeriod))
             ->count();
     }
@@ -131,11 +134,9 @@ new #[Title('Dashboard')] class extends Component {
     #[Computed]
     public function paidTotal(): float
     {
-        return (float) Invoice::query()
-            ->where('status', 'paid')
-            ->whereNotNull('paid_at')
+        return (float) Payment::query()
             ->where('paid_at', '>=', now()->subDays($this->paidPeriod))
-            ->sum('total');
+            ->sum('amount');
     }
 
     /**
@@ -147,11 +148,9 @@ new #[Title('Dashboard')] class extends Component {
         $totals = [];
 
         foreach ([7, 30, 90] as $days) {
-            $totals[$days] = (float) Invoice::query()
-                ->where('status', 'paid')
-                ->whereNotNull('paid_at')
+            $totals[$days] = (float) Payment::query()
                 ->where('paid_at', '>=', now()->subDays($days))
-                ->sum('total');
+                ->sum('amount');
         }
 
         return $totals;
@@ -199,10 +198,10 @@ new #[Title('Dashboard')] class extends Component {
             </flux:card>
 
             <flux:card class="flex flex-col gap-1">
-                <flux:text class="text-xs font-medium uppercase tracking-wide">{{ __('Paid') }}</flux:text>
+                <flux:text class="text-xs font-medium uppercase tracking-wide">{{ __('Collected') }}</flux:text>
                 <div class="text-2xl font-semibold">${{ number_format($this->paidTotal, 2) }}</div>
                 <flux:text class="text-xs">
-                    {{ trans_choice(':count invoice|:count invoices', $this->paidCount) }}
+                    {{ trans_choice(':count payment|:count payments', $this->paidCount) }}
                     · {{ __('last :days days', ['days' => $paidPeriod]) }}
                 </flux:text>
             </flux:card>
@@ -283,6 +282,12 @@ new #[Title('Dashboard')] class extends Component {
                                         <div @class(['text-xs', 'text-red-600 dark:text-red-400' => $isOverdue, 'text-zinc-500 dark:text-zinc-400' => ! $isOverdue])>
                                             {{ $isOverdue ? __('Overdue :date', ['date' => $invoice->due_date->format('M j, Y')]) : __('Due :date', ['date' => $invoice->due_date->format('M j, Y')]) }}
                                         </div>
+
+                                        @if ($invoice->amountPaid() > 0)
+                                            <div class="text-xs text-amber-600 dark:text-amber-400">
+                                                {{ $invoice->paidPercentage() }}% {{ __('paid') }} · ${{ number_format($invoice->balanceDue(), 2) }} {{ __('due') }}
+                                            </div>
+                                        @endif
                                     </div>
                                 </a>
                             @endforeach
@@ -293,7 +298,7 @@ new #[Title('Dashboard')] class extends Component {
                 <flux:card class="flex flex-col gap-4">
                     <div class="flex flex-wrap items-start justify-between gap-4">
                         <div>
-                            <flux:heading>{{ __('Recently paid') }}</flux:heading>
+                            <flux:heading>{{ __('Recent payments') }}</flux:heading>
                             <flux:subheading>{{ __('Payments received in the selected period.') }}</flux:subheading>
                         </div>
 
@@ -311,33 +316,39 @@ new #[Title('Dashboard')] class extends Component {
                     </div>
 
                     <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-900">
-                        <span>{{ __('Paid in the last :days days', ['days' => $paidPeriod]) }}</span>
+                        <span>{{ __('Collected in the last :days days', ['days' => $paidPeriod]) }}</span>
                         <span class="font-semibold">
                             ${{ number_format($this->paidTotal, 2) }}
-                            · {{ trans_choice(':count invoice|:count invoices', $this->paidCount) }}
+                            · {{ trans_choice(':count payment|:count payments', $this->paidCount) }}
                         </span>
                     </div>
 
-                    @if ($this->paidInvoices->isEmpty())
-                        <flux:text class="py-6 text-center">{{ __('No paid invoices in this period.') }}</flux:text>
+                    @if ($this->recentPayments->isEmpty())
+                        <flux:text class="py-6 text-center">{{ __('No payments in this period.') }}</flux:text>
                     @else
                         <div class="divide-y divide-neutral-200 dark:divide-neutral-700">
-                            @foreach ($this->paidInvoices as $invoice)
+                            @foreach ($this->recentPayments as $payment)
                                 <a
-                                    href="{{ route('invoices.show', $invoice) }}"
+                                    href="{{ route('invoices.show', $payment->invoice) }}"
                                     wire:navigate
                                     class="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80"
                                 >
                                     <div class="min-w-0">
-                                        <div class="font-medium">{{ $invoice->invoice_number }}</div>
-                                        <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ $invoice->customer->company_name }}</div>
+                                        <div class="font-medium">{{ $payment->invoice->invoice_number }}</div>
+                                        <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ $payment->invoice->customer->company_name }}</div>
                                     </div>
 
                                     <div class="text-right text-sm">
-                                        <div class="font-medium">${{ number_format((float) $invoice->total, 2) }}</div>
+                                        <div class="font-medium">${{ number_format((float) $payment->amount, 2) }}</div>
                                         <div class="text-xs text-zinc-500 dark:text-zinc-400">
-                                            {{ __('Paid :date', ['date' => $invoice->paid_at?->format('M j, Y')]) }}
+                                            {{ __('Paid :date', ['date' => $payment->paid_at->format('M j, Y')]) }}
                                         </div>
+
+                                        @if ($payment->invoice->isPartiallyPaid())
+                                            <div class="text-xs text-amber-600 dark:text-amber-400">
+                                                {{ $payment->invoice->paidPercentage() }}% {{ __('of invoice paid') }}
+                                            </div>
+                                        @endif
                                     </div>
                                 </a>
                             @endforeach
@@ -349,7 +360,7 @@ new #[Title('Dashboard')] class extends Component {
             <div class="flex flex-col gap-6">
                 <flux:card class="flex flex-col gap-4">
                     <div>
-                        <flux:heading>{{ __('Paid totals') }}</flux:heading>
+                        <flux:heading>{{ __('Collected totals') }}</flux:heading>
                         <flux:subheading>{{ __('Collected revenue by period.') }}</flux:subheading>
                     </div>
 
@@ -395,7 +406,7 @@ new #[Title('Dashboard')] class extends Component {
                                         <div class="truncate text-xs text-zinc-500 dark:text-zinc-400">{{ $invoice->customer->company_name }}</div>
                                     </div>
 
-                                    <span class="font-medium">${{ number_format((float) $invoice->total, 2) }}</span>
+                                    <span class="font-medium">${{ number_format($invoice->balanceDue(), 2) }}</span>
                                 </a>
                             @endforeach
                         </div>
