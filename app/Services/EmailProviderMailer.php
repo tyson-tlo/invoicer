@@ -111,7 +111,7 @@ class EmailProviderMailer
 
     private function accessToken(EmailProviderSetting $settings): string
     {
-        if ($settings->access_token && (! $settings->token_expires_at || $settings->token_expires_at->isFuture())) {
+        if ($settings->access_token && $settings->token_expires_at && $settings->token_expires_at->isFuture()) {
             return $settings->access_token;
         }
 

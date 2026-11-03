@@ -349,4 +349,30 @@ class EmailSettingsTest extends TestCase
             ->assertDontSee('Connect Outlook')
             ->assertSee('Change provider');
     }
+
+    public function test_expired_gmail_tokens_are_refreshed_before_sending(): void
+    {
+        Http::fake([
+            'oauth2.googleapis.com/*' => Http::response([
+                'access_token' => 'new-access-token',
+                'expires_in' => 3600,
+            ]),
+        ]);
+
+        $settings = EmailProviderSetting::current();
+        $settings->update([
+            'provider' => 'gmail',
+            'account_email' => 'sender@gmail.com',
+            'google_client_id' => 'google-id',
+            'google_client_secret' => 'google-secret',
+            'access_token' => 'old-access-token',
+            'refresh_token' => 'refresh-token',
+            'token_expires_at' => now()->subHour(),
+        ]);
+
+        $config = app(EmailProviderMailer::class)->mailerConfig($settings->refresh());
+
+        $this->assertSame('new-access-token', $config['password']);
+        $this->assertSame('new-access-token', $settings->fresh()->access_token);
+    }
 }

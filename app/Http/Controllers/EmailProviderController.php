@@ -190,7 +190,7 @@ class EmailProviderController extends Controller
             'from_address' => $settings->from_address ?: $email,
             'access_token' => $accessToken,
             'refresh_token' => $refreshToken,
-            'token_expires_at' => $expiresIn ? now()->addSeconds($expiresIn) : null,
+            'token_expires_at' => now()->addSeconds($expiresIn ?: 3600),
             'api_key' => null,
             'connected_at' => now(),
         ]);
