@@ -267,4 +267,86 @@ class EmailSettingsTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
     }
+
+    public function test_only_the_connected_provider_is_shown_by_default(): void
+    {
+        $this->actingAsUser();
+
+        EmailProviderSetting::current()->update([
+            'provider' => 'sendgrid',
+            'from_address' => 'billing@example.com',
+            'account_email' => 'billing@example.com',
+            'api_key' => 'SG.secret',
+        ]);
+
+        Livewire::test('pages::settings.email')
+            ->assertSee('Twilio SendGrid')
+            ->assertSee('Change provider')
+            ->assertDontSee('Connect Gmail')
+            ->assertDontSee('Connect Outlook')
+            ->assertDontSee('Use log mailer');
+    }
+
+    public function test_change_provider_reveals_other_providers(): void
+    {
+        $this->actingAsUser();
+
+        EmailProviderSetting::current()->update([
+            'provider' => 'sendgrid',
+            'from_address' => 'billing@example.com',
+            'account_email' => 'billing@example.com',
+            'api_key' => 'SG.secret',
+            'google_client_id' => 'google-id',
+            'google_client_secret' => 'google-secret',
+            'microsoft_client_id' => 'microsoft-id',
+            'microsoft_client_secret' => 'microsoft-secret',
+        ]);
+
+        Livewire::test('pages::settings.email')
+            ->call('changeProvider')
+            ->assertSet('changingProvider', true)
+            ->assertSee('Connect Gmail')
+            ->assertSee('Connect Outlook')
+            ->assertSee('Cancel');
+    }
+
+    public function test_cancelling_provider_change_hides_other_providers(): void
+    {
+        $this->actingAsUser();
+
+        EmailProviderSetting::current()->update([
+            'provider' => 'sendgrid',
+            'from_address' => 'billing@example.com',
+            'account_email' => 'billing@example.com',
+            'api_key' => 'SG.secret',
+            'google_client_id' => 'google-id',
+            'google_client_secret' => 'google-secret',
+            'microsoft_client_id' => 'microsoft-id',
+            'microsoft_client_secret' => 'microsoft-secret',
+        ]);
+
+        Livewire::test('pages::settings.email')
+            ->call('changeProvider')
+            ->call('cancelProviderChange')
+            ->assertSet('changingProvider', false)
+            ->assertDontSee('Connect Gmail')
+            ->assertDontSee('Connect Outlook')
+            ->assertSee('Change provider');
+    }
+
+    public function test_connecting_sendgrid_from_change_mode_collapses_the_options(): void
+    {
+        $this->actingAsUser();
+
+        Livewire::test('pages::settings.email')
+            ->call('changeProvider')
+            ->set('from_name', 'Billing')
+            ->set('from_address', 'billing@example.com')
+            ->set('sendgrid_api_key', 'SG.secret')
+            ->call('connectSendgrid')
+            ->assertSet('changingProvider', false)
+            ->assertDontSee('Connect Gmail')
+            ->assertDontSee('Connect Outlook')
+            ->assertSee('Change provider');
+    }
 }

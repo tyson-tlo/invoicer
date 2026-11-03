@@ -18,6 +18,7 @@ new #[Title('Email settings')] class extends Component {
     public string $microsoft_client_secret = '';
     public string $microsoft_tenant = 'common';
     public string $test_email = '';
+    public bool $changingProvider = false;
 
     public function mount(): void
     {
@@ -89,6 +90,16 @@ new #[Title('Email settings')] class extends Component {
         Flux::toast(variant: 'success', text: __('Microsoft OAuth credentials saved.'));
     }
 
+    public function changeProvider(): void
+    {
+        $this->changingProvider = true;
+    }
+
+    public function cancelProviderChange(): void
+    {
+        $this->changingProvider = false;
+    }
+
     public function connectLog(): void
     {
         abort_unless(app()->environment('local'), 404);
@@ -102,6 +113,8 @@ new #[Title('Email settings')] class extends Component {
             'api_key' => null,
             'connected_at' => now(),
         ]);
+
+        $this->changingProvider = false;
 
         Flux::toast(variant: 'success', text: __('The log mailer is now active.'));
     }
@@ -127,6 +140,7 @@ new #[Title('Email settings')] class extends Component {
         ]);
 
         $this->sendgrid_api_key = '';
+        $this->changingProvider = false;
 
         Flux::toast(variant: 'success', text: __('Twilio SendGrid connected.'));
     }
@@ -142,6 +156,8 @@ new #[Title('Email settings')] class extends Component {
             'api_key' => null,
             'connected_at' => null,
         ]);
+
+        $this->changingProvider = false;
 
         Flux::toast(variant: 'success', text: __('Email provider disconnected.'));
     }
@@ -175,6 +191,8 @@ new #[Title('Email settings')] class extends Component {
         @php
             $gmailConfigured = filled($this->settings->google_client_id) && filled($this->settings->google_client_secret);
             $outlookConfigured = filled($this->settings->microsoft_client_id) && filled($this->settings->microsoft_client_secret);
+            $activeProvider = $this->isConnected ? $this->settings->provider : null;
+            $showProviderOptions = $activeProvider === null || $changingProvider;
         @endphp
 
         <div class="flex flex-col gap-6">
@@ -193,10 +211,18 @@ new #[Title('Email settings')] class extends Component {
             <flux:card class="flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <flux:heading>{{ __('Active provider') }}</flux:heading>
+                        <flux:heading>{{ __('Default email provider') }}</flux:heading>
                         <flux:subheading>
                             @if ($this->isConnected)
-                                {{ $this->settings->provider === 'log' ? __('Log mailer') : ucfirst((string) $this->settings->provider) }}
+                                {{
+                                    match ($this->settings->provider) {
+                                        'log' => __('Log mailer'),
+                                        'gmail' => __('Gmail'),
+                                        'outlook' => __('Outlook'),
+                                        'sendgrid' => __('Twilio SendGrid'),
+                                        default => __('Unknown provider'),
+                                    }
+                                }}
 
                                 @if ($this->settings->account_email)
                                     ({{ $this->settings->account_email }})
@@ -220,16 +246,26 @@ new #[Title('Email settings')] class extends Component {
                     </flux:callout>
                 @endif
 
-                @if ($this->isConnected)
-                    <div>
+                <div class="flex flex-wrap items-center gap-2">
+                    @if ($activeProvider && ! $changingProvider)
+                        <flux:button variant="filled" wire:click="changeProvider">
+                            {{ __('Change provider') }}
+                        </flux:button>
+                    @elseif ($changingProvider)
+                        <flux:button variant="ghost" wire:click="cancelProviderChange">
+                            {{ __('Cancel') }}
+                        </flux:button>
+                    @endif
+
+                    @if ($this->isConnected)
                         <flux:button variant="danger" wire:click="disconnect">
                             {{ __('Disconnect') }}
                         </flux:button>
-                    </div>
-                @endif
+                    @endif
+                </div>
             </flux:card>
 
-            @if (app()->environment('local'))
+            @if (app()->environment('local') && ($showProviderOptions || $activeProvider === 'log'))
                 <flux:card class="flex flex-col gap-3">
                     <div class="flex items-start justify-between gap-3">
                         <div>
@@ -258,10 +294,11 @@ new #[Title('Email settings')] class extends Component {
                 </flux:card>
             @endif
 
-            <flux:card class="flex flex-col gap-3">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <flux:heading>{{ __('Gmail') }}</flux:heading>
+            @if ($showProviderOptions || $activeProvider === 'gmail')
+                <flux:card class="flex flex-col gap-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <flux:heading>{{ __('Gmail') }}</flux:heading>
                         <flux:subheading>{{ __('Send invoices through a Google account.') }}</flux:subheading>
                     </div>
 
@@ -301,11 +338,13 @@ new #[Title('Email settings')] class extends Component {
                     </div>
                 </div>
             </flux:card>
+            @endif
 
-            <flux:card class="flex flex-col gap-3">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <flux:heading>{{ __('Outlook') }}</flux:heading>
+            @if ($showProviderOptions || $activeProvider === 'outlook')
+                <flux:card class="flex flex-col gap-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <flux:heading>{{ __('Outlook') }}</flux:heading>
                         <flux:subheading>{{ __('Send invoices through a Microsoft account.') }}</flux:subheading>
                     </div>
 
@@ -346,11 +385,13 @@ new #[Title('Email settings')] class extends Component {
                     </div>
                 </div>
             </flux:card>
+            @endif
 
-            <flux:card class="flex flex-col gap-4">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <flux:heading>{{ __('Twilio SendGrid') }}</flux:heading>
+            @if ($showProviderOptions || $activeProvider === 'sendgrid')
+                <flux:card class="flex flex-col gap-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <flux:heading>{{ __('Twilio SendGrid') }}</flux:heading>
                         <flux:subheading>{{ __('Send invoices through Twilio SendGrid SMTP.') }}</flux:subheading>
                     </div>
 
@@ -379,6 +420,7 @@ new #[Title('Email settings')] class extends Component {
                     @endif
                 </div>
             </flux:card>
+            @endif
 
             <flux:card class="flex flex-col gap-4">
                 <div>
